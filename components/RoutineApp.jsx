@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Shippori_Mincho, Zen_Kaku_Gothic_New } from "next/font/google";
 import { useRoutineData } from "@/lib/useRoutineData";
+import { useDragReorder } from "@/lib/dragReorder";
 
 // 月のルーティン(独立アプリ版)の本体UI。
 //
@@ -72,6 +73,14 @@ function formatMonthDay2(dateStr) {
   const d = parseDateStr(dateStr);
   return `${d.getMonth() + 1}/${d.getDate()}(${WD[weekdayOf(dateStr)]})`;
 }
+// タスクの表示順。タスク管理モーダルでのドラッグ並び替え(sortOrder)を基準にし、
+// (原理上あり得ないはずだが)値が無いタスクは作成日順でフォールバックして末尾側に回す。
+function compareTaskOrder(a, b) {
+  const ao = typeof a.sortOrder === "number" ? a.sortOrder : Infinity;
+  const bo = typeof b.sortOrder === "number" ? b.sortOrder : Infinity;
+  if (ao !== bo) return ao - bo;
+  return (a.createdAt || "").localeCompare(b.createdAt || "");
+}
 
 export default function RoutineApp() {
   const routine = useRoutineData();
@@ -133,8 +142,19 @@ export default function RoutineApp() {
 
   const { tasks, categories, logs } = routine;
 
+  // タスク管理モーダルのドラッグ並び替え。sortedAllTasksは(読み込み中の早期returnより前に
+  // Hooksを呼ぶ必要があるため)ここで計算しておく。他の画面(日別パネル・表ビュー)は
+  // ドラッグできないが、表示順は同じcompareTaskOrderで揃える。
+  const sortedAllTasks = tasks.slice().sort(compareTaskOrder);
+  const { dragId, previewIds, registerRef, handlePointerDown } = useDragReorder({
+    ids: sortedAllTasks.map(t => t.id),
+    onCommit: orderedIds => routine.reorderTasks(orderedIds),
+  });
+  const tasksById = new Map(sortedAllTasks.map(t => [t.id, t]));
+  const displayTasks = previewIds ? previewIds.map(id => tasksById.get(id)).filter(Boolean) : sortedAllTasks;
+
   function tasksForDate(dateStr) {
-    return tasks.filter(t => isApplicable(t, dateStr)).sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+    return tasks.filter(t => isApplicable(t, dateStr)).sort(compareTaskOrder);
   }
   function entryFor(dateStr, taskId) {
     const log = logs[dateStr];
@@ -393,10 +413,8 @@ export default function RoutineApp() {
       }
       return true;
     })
-    .sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
+    .sort(compareTaskOrder);
   const hasUncategorized = tasks.some(t => !t.category);
-
-  const sortedAllTasks = tasks.slice().sort((a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""));
 
   return (
     <div className={`routine-root ${shippori.variable} ${zenKaku.variable}`}>
@@ -664,28 +682,54 @@ export default function RoutineApp() {
             </div>
 
             <div>
-              {sortedAllTasks.length === 0 ? (
+              {displayTasks.length === 0 ? (
                 <div className="empty-state" style={{ padding: "6px 0 16px" }}>
                   まだタスクがありません
                 </div>
               ) : (
-                sortedAllTasks.map(t => (
-                  <div key={t.id} className="task-list-item">
-                    <div>
-                      <div className="t-name">
-                        {catDot(t)}
-                        {t.name}
+                displayTasks.map(t => {
+                  const isDragging = dragId === t.id;
+                  return (
+                    <div
+                      key={t.id}
+                      data-row-id={t.id}
+                      ref={registerRef(t.id)}
+                      className="task-list-item"
+                      style={
+                        isDragging
+                          ? {
+                              // transformはuseDragReorder側でDOMへ直接書き込むため、ここでは指定しない。
+                              opacity: 0.85,
+                              zIndex: 50,
+                              position: "relative",
+                              pointerEvents: "none",
+                              boxShadow: "0 12px 28px rgba(0,0,0,0.25)",
+                              transition: "none",
+                            }
+                          : undefined
+                      }
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                        <div className="drag-handle" title="ドラッグして並べ替え" onPointerDown={e => handlePointerDown(e, t.id)}>
+                          ⋮⋮
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <div className="t-name">
+                            {catDot(t)}
+                            {t.name}
+                          </div>
+                          <div className="t-freq">{freqLabel(t)}</div>
+                        </div>
                       </div>
-                      <div className="t-freq">{freqLabel(t)}</div>
+                      <div className="actions">
+                        <button onClick={() => loadTaskIntoForm(t)}>編集</button>
+                        <button className="del-btn" onClick={() => requestDeleteTask(t)}>
+                          削除
+                        </button>
+                      </div>
                     </div>
-                    <div className="actions">
-                      <button onClick={() => loadTaskIntoForm(t)}>編集</button>
-                      <button className="del-btn" onClick={() => requestDeleteTask(t)}>
-                        削除
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
@@ -927,6 +971,13 @@ const ROUTINE_CSS = `
 .routine-root .task-list-item .actions{ display:flex; gap:6px; flex-shrink:0; }
 .routine-root .task-list-item button{ background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:5px 9px; font-size:12px; cursor:pointer; color:var(--text); }
 .routine-root .task-list-item button.del-btn:hover{ color:var(--danger); border-color:var(--danger); }
+.routine-root .drag-handle{
+  flex-shrink:0; display:flex; align-items:center; justify-content:center;
+  width:28px; height:32px; padding:4px; margin-left:-4px;
+  color:var(--text-dim); font-size:13px; letter-spacing:-2px; line-height:1;
+  cursor:grab; touch-action:none; user-select:none;
+}
+.routine-root .drag-handle:active{ cursor:grabbing; }
 
 .routine-root .form-section{ margin-top:18px; }
 .routine-root .form-section h3{ font-size:14px; margin-bottom:10px; color:var(--text-dim); font-weight:500; }
