@@ -597,8 +597,7 @@ export default function RoutineApp() {
                                 : { borderLeft: "4px solid transparent" }
                             }
                           >
-                            <div style={{ fontSize: 13.5 }}>{t.name}</div>
-                            <div className="t-freq">{freqLabel(t)}</div>
+                            <div style={{ fontSize: 14 }}>{t.name}</div>
                           </td>
                           {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => {
                             const dateStr = toDateStr(currentYear, currentMonth, d);
