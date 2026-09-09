@@ -118,6 +118,7 @@ export default function RoutineApp() {
   const [catAddOpen, setCatAddOpen] = useState(false);
   const [catName, setCatName] = useState("");
   const [catColor, setCatColor] = useState(CATEGORY_COLORS[0]);
+  const [editingCategoryId, setEditingCategoryId] = useState(null); // null = 新規作成フォーム, idならそのカテゴリの編集フォーム
 
   const [toast, setToast] = useState("");
   const toastTimerRef = useRef(null);
@@ -214,6 +215,7 @@ export default function RoutineApp() {
     setFormDate(selectedDate);
     setFormCategoryId(null);
     setCatAddOpen(false);
+    setEditingCategoryId(null);
   }
   function loadTaskIntoForm(t) {
     setEditingTaskId(t.id);
@@ -223,6 +225,7 @@ export default function RoutineApp() {
     setFormDate(t.date || selectedDate);
     setFormCategoryId(t.category || null);
     setCatAddOpen(false);
+    setEditingCategoryId(null);
   }
   function openModal(prefillOnce) {
     resetForm();
@@ -266,18 +269,41 @@ export default function RoutineApp() {
   function requestDeleteCategory(cat) {
     if (confirm(`カテゴリ「${cat.name}」を削除しますか?(タスクからカテゴリ設定のみ外れます)`)) {
       if (formCategoryId === cat.id) setFormCategoryId(null);
+      if (editingCategoryId === cat.id) setCatAddOpen(false);
       routine.deleteCategory(cat.id);
     }
   }
-  async function confirmAddCategory() {
+  function openCatAddForm() {
+    setEditingCategoryId(null);
+    setCatName("");
+    setCatColor(CATEGORY_COLORS[0]);
+    setCatAddOpen(true);
+  }
+  function openCatEditForm(cat) {
+    setEditingCategoryId(cat.id);
+    setCatName(cat.name);
+    setCatColor(cat.colorKey);
+    setCatAddOpen(true);
+  }
+  async function confirmCatForm() {
     const name = catName.trim();
     if (!name) {
       alert("カテゴリ名を入力してください");
       return;
     }
-    const id = await routine.addCategory(name, catColor || CATEGORY_COLORS[0]);
-    if (id) setFormCategoryId(id);
+    const colorKey = catColor || CATEGORY_COLORS[0];
+    if (editingCategoryId) {
+      const ok = await routine.updateCategory(editingCategoryId, { name, colorKey });
+      if (!ok) {
+        showToast("カテゴリの更新に失敗しました");
+        return;
+      }
+    } else {
+      const id = await routine.addCategory(name, colorKey);
+      if (id) setFormCategoryId(id);
+    }
     setCatAddOpen(false);
+    setEditingCategoryId(null);
   }
 
   // ---------------- エクスポート / インポート ----------------
@@ -714,6 +740,16 @@ export default function RoutineApp() {
                       <span className={`cat-dot swatch-${cat.colorKey}`} />
                       {cat.name}
                       <span
+                        className="cat-edit"
+                        title="カテゴリを編集"
+                        onClick={e => {
+                          e.stopPropagation();
+                          openCatEditForm(cat);
+                        }}
+                      >
+                        ✎
+                      </span>
+                      <span
                         className="cat-x"
                         onClick={e => {
                           e.stopPropagation();
@@ -724,7 +760,7 @@ export default function RoutineApp() {
                       </span>
                     </div>
                   ))}
-                  <div className="cat-chip" onClick={() => { setCatAddOpen(true); setCatName(""); setCatColor(CATEGORY_COLORS[0]); }}>
+                  <div className="cat-chip" onClick={openCatAddForm}>
                     ＋ 新規
                   </div>
                 </div>
@@ -742,10 +778,10 @@ export default function RoutineApp() {
                       ))}
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <button type="button" className="btn-primary" style={{ flex: "none", padding: "8px 16px", fontSize: 13 }} onClick={confirmAddCategory}>
-                        追加
+                      <button type="button" className="btn-primary" style={{ flex: "none", padding: "8px 16px", fontSize: 13 }} onClick={confirmCatForm}>
+                        {editingCategoryId ? "更新" : "追加"}
                       </button>
-                      <button type="button" className="btn-secondary" style={{ padding: "8px 16px", fontSize: 13 }} onClick={() => setCatAddOpen(false)}>
+                      <button type="button" className="btn-secondary" style={{ padding: "8px 16px", fontSize: 13 }} onClick={() => { setCatAddOpen(false); setEditingCategoryId(null); }}>
                         キャンセル
                       </button>
                     </div>
@@ -932,6 +968,8 @@ const ROUTINE_CSS = `
 .routine-root .cat-chip-row{ display:flex; flex-wrap:wrap; gap:8px; }
 .routine-root .cat-chip{ display:inline-flex; align-items:center; gap:2px; border:1px solid var(--border); border-radius:20px; padding:6px 12px; font-size:12.5px; cursor:pointer; color:var(--text-dim); background:var(--surface); }
 .routine-root .cat-chip.selected{ border-color:var(--accent); color:var(--text); background:rgba(var(--accent-rgb),0.10); }
+.routine-root .cat-chip .cat-edit{ margin-left:4px; color:var(--text-dim); font-size:11px; }
+.routine-root .cat-chip .cat-edit:hover{ color:var(--accent); }
 .routine-root .cat-chip .cat-x{ margin-left:4px; color:var(--text-dim); font-size:11px; }
 .routine-root .cat-chip .cat-x:hover{ color:var(--danger); }
 .routine-root .cat-swatches{ display:flex; gap:8px; flex-wrap:wrap; margin:4px 0 12px; }
