@@ -5,7 +5,7 @@ import { Shippori_Mincho, Zen_Kaku_Gothic_New } from "next/font/google";
 import { useRoutineData } from "@/lib/useRoutineData";
 import { useDragReorder } from "@/lib/dragReorder";
 
-// 月のルーティン(独立アプリ版)の本体UI。
+// UnyaTask(独立アプリ版)の本体UI。
 //
 // 元になったデザイン(Artifact「月のルーティン」)の見た目・機能をほぼそのまま踏襲。
 // データ層は lib/useRoutineData.js 経由でSupabase(routine_tasks / routine_categories /
@@ -337,7 +337,7 @@ export default function RoutineApp() {
       return;
     }
     const payload = {
-      app: "moon-routine",
+      app: "unyatask",
       version: 1,
       exportedAt: new Date().toISOString(),
       tasks,
@@ -348,7 +348,7 @@ export default function RoutineApp() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `routine-backup-${todayStr()}.json`;
+    a.download = `unyatask-backup-${todayStr()}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -422,7 +422,7 @@ export default function RoutineApp() {
       <div id="routine-app">
         <div className="app-header">
           <h1>
-            <span className="moon-mark">🌗</span>月のルーティン
+            <span className="moon-mark">🌗</span>UnyaTask
           </h1>
           <button className="icon-btn" onClick={() => openModal(false)}>
             ⚙ タスク管理

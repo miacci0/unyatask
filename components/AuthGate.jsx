@@ -56,7 +56,7 @@ export default function AuthGate({ children }) {
         <style dangerouslySetInnerHTML={{ __html: AUTH_CSS }} />
         <div className="auth-card">
           <div className="auth-mark">🌗</div>
-          <h1>月のルーティン</h1>
+          <h1>UnyaTask</h1>
           <p>Googleアカウントでログインしてください</p>
           <button onClick={signIn}>Googleでログイン</button>
         </div>

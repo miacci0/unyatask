@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "月のルーティン",
+  title: "UnyaTask",
   description: "カスタマイズ可能な日々のタスク管理",
 };
 

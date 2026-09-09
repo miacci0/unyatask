@@ -1,6 +1,6 @@
 -- Supabaseの SQL Editor でそのまま実行してください。
 --
--- 月のルーティン(独立アプリ版)用のテーブル。Animator Workspaceと同じSupabaseプロジェクトの
+-- UnyaTask(独立アプリ版)用のテーブル。Animator Workspaceと同じSupabaseプロジェクトの
 -- 既存 auth.users(Googleログイン)をそのまま使うが、テーブルはこのアプリ専用に新規作成する
 -- (Animator Workspace側のapp_dataテーブルとは一切共有しない)。
 --
