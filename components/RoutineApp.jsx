@@ -18,14 +18,20 @@ const zenKaku = Zen_Kaku_Gothic_New({ subsets: ["latin"], weight: ["400", "500",
 const WD = ["日", "月", "火", "水", "木", "金", "土"];
 const MOONS = ["🌑", "🌒", "🌓", "🌔", "🌕"];
 const MOON_TITLES = ["0%(未着手)", "25%", "50%", "75%", "100%(完了)"];
+// 一覧(表)専用のスタンプ絵文字。index = 達成度レベル(0〜4)。カレンダー(MOONS)とは別物で、
+// 0(=0%)は「未記録」と同じ「○」のままにする(25/50/75/100%の4段階だけスタンプに差し替え)。
+const STAMPS = ["○", "🐢", "⭕️", "⭐️", "💯"];
 const CATEGORY_COLORS = ["rose", "amber", "moss", "sky", "lavender", "clay", "teal", "slate"];
+// 一覧(表)のタスク名列の幅。CSSの .task-col / .task-col-cell の width と同じ値に揃えること
+// (JS側で日付列の幅を計算する際、この値を引いて残りを日数で割るため)。
+const TASK_COL_WIDTH = 200;
 const LEVEL_OPTIONS = [
   { value: "unset", label: "— 未記録" },
   { value: "0", label: "🌑 0%" },
-  { value: "1", label: "🌒 25%" },
-  { value: "2", label: "🌓 50%" },
-  { value: "3", label: "🌔 75%" },
-  { value: "4", label: "🌕 100%" },
+  { value: "1", label: "🐢 25%" },
+  { value: "2", label: "⭕️ 50%" },
+  { value: "3", label: "⭐️ 75%" },
+  { value: "4", label: "💯 100%" },
   { value: "skip", label: "🌙 今日は不要" },
 ];
 
@@ -115,6 +121,27 @@ export default function RoutineApp() {
 
   const [view, setView] = useState("calendar");
   const [tableCategoryFilter, setTableCategoryFilter] = useState(null); // null=all, "__none__", or category id
+
+  // 一覧(表)の日付列の幅。table-layout:fixedの自動均等割りだけに任せると、列数が多い月では
+  // 端数px(丸め誤差)がわずかに積み上がってコンテナ幅を1〜2pxだけ超え、横スクロールバーが
+  // 出てしまうことがある。そのため実測した.table-wrapの幅から「切り捨て」で列幅を計算し、
+  // <colgroup>で明示指定することで、合計が絶対にコンテナ幅を超えないようにする。
+  const tableWrapRef = useRef(null);
+  const [dayColWidth, setDayColWidth] = useState(36);
+  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+  useEffect(() => {
+    if (view !== "table") return;
+    const el = tableWrapRef.current;
+    if (!el) return;
+    function recompute() {
+      const available = el.clientWidth - TASK_COL_WIDTH;
+      setDayColWidth(Math.max(24, Math.floor(available / daysInMonth)));
+    }
+    recompute();
+    const ro = new ResizeObserver(recompute);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [view, daysInMonth]);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTaskId, setEditingTaskId] = useState(null);
@@ -389,7 +416,6 @@ export default function RoutineApp() {
     );
   }
 
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const firstDow = new Date(currentYear, currentMonth, 1).getDay();
   const daysInPrevMonth = new Date(currentYear, currentMonth, 0).getDate();
   const cells = [];
@@ -419,7 +445,7 @@ export default function RoutineApp() {
   return (
     <div className={`routine-root ${shippori.variable} ${zenKaku.variable}`}>
       <style dangerouslySetInnerHTML={{ __html: ROUTINE_CSS }} />
-      <div id="routine-app">
+      <div id="routine-app" className={view === "table" ? "wide" : undefined}>
         <div className="app-header">
           <h1>
             <span className="moon-mark">🌗</span>UnyaTask
@@ -561,8 +587,14 @@ export default function RoutineApp() {
                 </div>
               )}
             </div>
-            <div className="table-wrap">
+            <div className="table-wrap" ref={tableWrapRef}>
               <table id="tasks-table">
+                <colgroup>
+                  <col style={{ width: TASK_COL_WIDTH }} />
+                  {Array.from({ length: daysInMonth }, (_, i) => (
+                    <col key={i} style={{ width: dayColWidth }} />
+                  ))}
+                </colgroup>
                 <thead>
                   <tr>
                     <th className="task-col">タスク</th>
@@ -615,7 +647,7 @@ export default function RoutineApp() {
                             return (
                               <td key={d}>
                                 <div className="cell-wrap">
-                                  <div className="cell-display">{entry.skipped ? "➖" : typeof entry.level === "number" ? MOONS[entry.level] : "○"}</div>
+                                  <div className="cell-display">{entry.skipped ? "➖" : typeof entry.level === "number" ? STAMPS[entry.level] : "○"}</div>
                                   <select
                                     className="cell-select"
                                     title={formatMonthDay2(dateStr) + " の達成度"}
@@ -878,6 +910,10 @@ const ROUTINE_CSS = `
 .routine-root .loading-state{ min-height:60vh; display:flex; align-items:center; justify-content:center; color:var(--text-dim); font-size:13.5px; }
 
 #routine-app{ max-width:920px; margin:0 auto; padding:28px 20px 80px; }
+/* 一覧(表)ビュー表示中だけ横幅を広げる(カレンダー・日別パネル・モーダルは920pxのまま)。
+   日付列の実際の幅は.table-wrapの実測幅から計算する(<colgroup>参照)ため、この数値を
+   どれだけ大きくしても横スクロールバーは出ない — あくまでスタンプをどれだけ大きく見せるかの調整値。 */
+#routine-app.wide{ max-width:1500px; }
 
 .routine-root .app-header{ display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:22px; }
 .routine-root .app-header h1{ font-size:22px; letter-spacing:0.02em; }
@@ -1029,14 +1065,16 @@ const ROUTINE_CSS = `
 .routine-root .cat-add-form input[type=text]{ width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:9px 11px; color:var(--text); font-size:13.5px; }
 
 .routine-root .table-wrap{ overflow-x:auto; border:1px solid var(--border); border-radius:var(--radius); background:var(--surface); box-shadow:var(--shadow); }
-.routine-root #tasks-table{ border-collapse:collapse; width:max-content; min-width:100%; }
+.routine-root #tasks-table{ border-collapse:collapse; width:100%; table-layout:fixed; }
 .routine-root #tasks-table th, .routine-root #tasks-table td{ border-bottom:1px solid var(--border); text-align:center; padding:0; }
 .routine-root #tasks-table thead th{ padding:8px 4px 6px; font-size:11px; color:var(--text-dim); font-weight:500; background:var(--surface); position:sticky; top:0; z-index:3; }
-.routine-root th.task-col{ position:sticky; left:0; z-index:4; text-align:left; padding:8px 14px 8px 12px !important; min-width:180px; border-right:1px solid var(--border); background:var(--surface); }
-.routine-root td.task-col-cell{ position:sticky; left:0; z-index:2; background:var(--surface); text-align:left; padding:9px 14px 9px 12px; min-width:180px; border-right:1px solid var(--border); }
-.routine-root .day-col{ width:36px; }
-.routine-root .cell-wrap{ position:relative; width:36px; height:38px; }
-.routine-root .cell-display{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:14px; color:var(--text); pointer-events:none; }
+.routine-root th.task-col{ position:sticky; left:0; z-index:4; text-align:left; padding:8px 14px 8px 12px !important; width:200px; min-width:180px; border-right:1px solid var(--border); background:var(--surface); }
+.routine-root td.task-col-cell{ position:sticky; left:0; z-index:2; background:var(--surface); text-align:left; padding:9px 14px 9px 12px; width:200px; min-width:180px; border-right:1px solid var(--border); }
+/* 日付列自体にはCSSで幅を指定しない。実際の幅は<colgroup>(JS側でtable-wrapの実測幅から
+   切り捨て計算)で列ごとに明示しており、その値がコンテナ幅を絶対に超えないため、
+   何日ある月でも画面幅が変わっても横スクロールバーが出ない。 */
+.routine-root .cell-wrap{ position:relative; width:100%; height:52px; }
+.routine-root .cell-display{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:26px; color:var(--text); pointer-events:none; }
 .routine-root .cell-display.dash{ color:var(--border); font-size:11px; }
 .routine-root .cell-select{ position:absolute; inset:0; width:100%; height:100%; opacity:0; border:none; cursor:pointer; font-size:14px; }
 .routine-root .cell-wrap:hover .cell-display:not(.dash){ background:var(--surface-2); }
