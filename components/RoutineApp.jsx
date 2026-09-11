@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Shippori_Mincho, Zen_Kaku_Gothic_New } from "next/font/google";
 import { useRoutineData } from "@/lib/useRoutineData";
+import { APP_DESCRIPTION, VERSION_HISTORY } from "@/lib/appContent";
 import { useDragReorder } from "@/lib/dragReorder";
 
 // UnyaTask(独立アプリ版)の本体UI。
@@ -155,6 +156,8 @@ export default function RoutineApp() {
   const [catName, setCatName] = useState("");
   const [catColor, setCatColor] = useState(CATEGORY_COLORS[0]);
   const [editingCategoryId, setEditingCategoryId] = useState(null); // null = 新規作成フォーム, idならそのカテゴリの編集フォーム
+
+  const [aboutOpen, setAboutOpen] = useState(false);
 
   const [toast, setToast] = useState("");
   const toastTimerRef = useRef(null);
@@ -679,13 +682,19 @@ export default function RoutineApp() {
         )}
 
         <div className="storage-note">
-          {routine.saveStatus === "syncing"
-            ? "保存中…"
-            : routine.saveStatus === "error"
-            ? "保存に失敗しました。しばらくしてから再読み込みしてください"
-            : routine.loadFailed
-            ? "読み込みに失敗しました。再読み込みしてください"
-            : "Googleアカウントに保存されています"}
+          <span>
+            {routine.saveStatus === "syncing"
+              ? "保存中…"
+              : routine.saveStatus === "error"
+              ? "保存に失敗しました。しばらくしてから再読み込みしてください"
+              : routine.loadFailed
+              ? "読み込みに失敗しました。再読み込みしてください"
+              : "Googleアカウントに保存されています"}
+          </span>
+          <span className="about-sep">・</span>
+          <button type="button" className="about-link" onClick={() => setAboutOpen(true)}>
+            このアプリについて
+          </button>
         </div>
       </div>
 
@@ -879,6 +888,39 @@ export default function RoutineApp() {
           </div>
         </div>
       )}
+
+      {aboutOpen && (
+        <div
+          className="modal-overlay"
+          onClick={e => {
+            if (e.target === e.currentTarget) setAboutOpen(false);
+          }}
+        >
+          <div className="modal">
+            <div className="modal-head">
+              <h2>このアプリについて</h2>
+              <button className="close-x" onClick={() => setAboutOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <p className="about-desc">{APP_DESCRIPTION}</p>
+            <h3 className="about-heading">リリースノート</h3>
+            {VERSION_HISTORY.map(v => (
+              <div key={v.version} className="about-version">
+                <div className="about-version-head">
+                  v{v.version}
+                  <span className="about-version-date">({v.date})</span>
+                </div>
+                <ul>
+                  {v.notes.map((note, i) => (
+                    <li key={i}>{note}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1004,6 +1046,13 @@ const ROUTINE_CSS = `
 .routine-root .modal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
 .routine-root .modal-head h2{ font-size:17px; }
 .routine-root .close-x{ background:transparent; border:none; font-size:20px; color:var(--text-dim); cursor:pointer; line-height:1; }
+.routine-root .about-desc{ font-size:13.5px; color:var(--text-dim); line-height:1.7; margin:0 0 18px; }
+.routine-root .about-heading{ font-size:14px; margin:0 0 10px; font-weight:500; }
+.routine-root .about-version{ margin-bottom:16px; }
+.routine-root .about-version-head{ font-family:var(--routine-font-serif),serif; font-size:14.5px; margin-bottom:4px; }
+.routine-root .about-version-date{ font-family:var(--routine-font-sans),sans-serif; font-size:11.5px; color:var(--text-dim); margin-left:6px; }
+.routine-root .about-version ul{ margin:0; padding-left:18px; }
+.routine-root .about-version li{ font-size:13px; color:var(--text-dim); line-height:1.6; margin-bottom:4px; }
 .routine-root .task-list-item{ display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--border); gap:10px; }
 .routine-root .task-list-item .t-name{ font-size:14px; display:flex; align-items:center; }
 .routine-root .task-list-item .t-freq{ font-size:11px; color:var(--text-dim); }
@@ -1037,7 +1086,16 @@ const ROUTINE_CSS = `
 .routine-root .btn-primary{ background:var(--accent); color:var(--accent-ink); border:none; border-radius:9px; padding:11px 18px; font-size:14px; font-weight:600; cursor:pointer; flex:1; }
 .routine-root .btn-secondary{ background:transparent; border:1px solid var(--border); color:var(--text-dim); border-radius:9px; padding:11px 18px; font-size:14px; cursor:pointer; }
 .routine-root .hidden{ display:none !important; }
-.routine-root .storage-note{ text-align:center; font-size:11px; color:var(--text-dim); margin-top:26px; opacity:0.7; }
+.routine-root .storage-note{
+  display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:6px;
+  text-align:center; font-size:11px; color:var(--text-dim); margin-top:26px; opacity:0.7;
+}
+.routine-root .about-sep{ opacity:0.6; }
+.routine-root .about-link{
+  background:none; border:none; padding:0; margin:0; font:inherit; color:inherit; cursor:pointer;
+  text-decoration:underline; text-underline-offset:2px;
+}
+.routine-root .about-link:hover{ color:var(--text); }
 .routine-root .toast{
   position:fixed; left:50%; bottom:20px; transform:translateX(-50%) translateY(10px); background:var(--surface); border:1px solid var(--border);
   color:var(--text); padding:10px 16px; border-radius:10px; font-size:13px; box-shadow:var(--shadow); opacity:0; pointer-events:none;
