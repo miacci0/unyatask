@@ -644,10 +644,14 @@ export default function RoutineApp() {
                             }
                             const entry = entryFor(dateStr, t.id) || {};
                             const currentValue = entry.skipped ? "skip" : typeof entry.level === "number" ? String(entry.level) : "unset";
+                            // 未記録・0%はどちらも「○」(STAMPS[0]も"○")なので、同じ半透明グレー表示にする。
+                            const isUnsetLike = !entry.skipped && (typeof entry.level !== "number" || entry.level === 0);
                             return (
                               <td key={d}>
                                 <div className="cell-wrap">
-                                  <div className="cell-display">{entry.skipped ? "➖" : typeof entry.level === "number" ? STAMPS[entry.level] : "○"}</div>
+                                  <div className={"cell-display" + (isUnsetLike ? " unset" : "")}>
+                                    {entry.skipped ? "➖" : typeof entry.level === "number" ? STAMPS[entry.level] : "○"}
+                                  </div>
                                   <select
                                     className="cell-select"
                                     title={formatMonthDay2(dateStr) + " の達成度"}
@@ -1076,6 +1080,7 @@ const ROUTINE_CSS = `
 .routine-root .cell-wrap{ position:relative; width:100%; height:52px; }
 .routine-root .cell-display{ width:100%; height:100%; display:flex; align-items:center; justify-content:center; font-size:26px; color:var(--text); pointer-events:none; }
 .routine-root .cell-display.dash{ color:var(--border); font-size:11px; }
+.routine-root .cell-display.unset{ color:var(--text-dim); opacity:0.4; }
 .routine-root .cell-select{ position:absolute; inset:0; width:100%; height:100%; opacity:0; border:none; cursor:pointer; font-size:14px; }
 .routine-root .cell-wrap:hover .cell-display:not(.dash){ background:var(--surface-2); }
 .routine-root #tasks-table tbody tr:nth-child(even) td{ background-image:linear-gradient(rgba(127,127,127,0.045),rgba(127,127,127,0.045)); }
