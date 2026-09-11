@@ -55,7 +55,7 @@ export default function AuthGate({ children }) {
       <div className={`auth-gate-login ${shippori.variable}`}>
         <style dangerouslySetInnerHTML={{ __html: AUTH_CSS }} />
         <div className="auth-card">
-          <div className="auth-mark">🌗</div>
+          <div className="auth-mark">✅</div>
           <h1>UnyaTask</h1>
           <p>Googleアカウントでログインしてください</p>
           <button onClick={signIn}>Googleでログイン</button>

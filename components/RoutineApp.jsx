@@ -451,7 +451,7 @@ export default function RoutineApp() {
       <div id="routine-app" className={view === "table" ? "wide" : undefined}>
         <div className="app-header">
           <h1>
-            <span className="moon-mark">🌗</span>UnyaTask
+            <span className="app-mark">✅</span>UnyaTask
           </h1>
           <button className="icon-btn" onClick={() => openModal(false)}>
             ⚙ タスク管理
@@ -963,7 +963,7 @@ const ROUTINE_CSS = `
 
 .routine-root .app-header{ display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:22px; }
 .routine-root .app-header h1{ font-size:22px; letter-spacing:0.02em; }
-.routine-root .app-header .moon-mark{ display:inline-block; margin-right:8px; }
+.routine-root .app-header .app-mark{ display:inline-block; margin-right:8px; }
 .routine-root .icon-btn{
   background:var(--surface); border:1px solid var(--border); color:var(--text); border-radius:10px;
   padding:9px 14px; font-size:14px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;
