@@ -150,4 +150,10 @@ const AUTH_CSS = `
   font-family: inherit;
 }
 .auth-topbar button:hover { color: #EDEBE4; }
+/* モバイル(767px以下)ではRoutineApp側の「⋯」シートにメールアドレス・ログアウトを
+   表示するため、ここでの重複表示は隠す(RoutineApp.jsxの.rt-desktop-only/.rt-mobile-only
+   と同じ767pxブレークポイント)。 */
+@media (max-width: 767px) {
+  .auth-topbar { display: none; }
+}
 `;

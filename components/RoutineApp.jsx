@@ -5,6 +5,25 @@ import { Shippori_Mincho, Zen_Kaku_Gothic_New } from "next/font/google";
 import { useRoutineData } from "@/lib/useRoutineData";
 import { APP_DESCRIPTION, VERSION_HISTORY } from "@/lib/appContent";
 import { useDragReorder } from "@/lib/dragReorder";
+import { supabase } from "@/lib/supabaseClient";
+import MobileRoutineApp from "@/components/mobile/MobileRoutineApp";
+import {
+  WD,
+  MOONS,
+  MOON_TITLES,
+  STAMPS,
+  CATEGORY_COLORS,
+  LEVEL_OPTIONS,
+  toDateStr,
+  todayStr,
+  parseDateStr,
+  weekdayOf,
+  isApplicable,
+  freqLabel,
+  formatDayTitle,
+  formatMonthDay2,
+  compareTaskOrder,
+} from "@/lib/routineShared";
 
 // UnyaTask(独立アプリ版)の本体UI。
 //
@@ -12,82 +31,21 @@ import { useDragReorder } from "@/lib/dragReorder";
 // データ層は lib/useRoutineData.js 経由でSupabase(routine_tasks / routine_categories /
 // routine_logs、Googleログインでuser_idごとに分離)に保存する。Animator Workspaceとは
 // 同じSupabaseプロジェクト(同じGoogleアカウント)を使うが、コード・デプロイは完全に独立。
+//
+// 画面のレイアウトはこのコンポーネント(デスクトップ向け)と components/mobile/MobileRoutineApp.jsx
+// (モバイル向け、Claude Designでのモックアップを元に実装)の2系統がある。どちらも同じ
+// useRoutineData()の結果とここで定義したハンドラ関数をそのまま共有しており、CSSの
+// メディアクエリ(767px)だけで表示を出し分ける(JSでのUA/幅判定はしない)。データ・ロジックは
+// 完全に共通なので、一覧のフィルタ・フォームの入力内容なども画面幅をまたいで保持される。
+// 日付計算・頻度表示などの純粋関数は lib/routineShared.js に集約し、両画面で必ずそこから使う。
 
 const shippori = Shippori_Mincho({ subsets: ["latin"], weight: ["400", "500", "600", "800"], variable: "--routine-font-serif" });
 const zenKaku = Zen_Kaku_Gothic_New({ subsets: ["latin"], weight: ["400", "500", "700"], variable: "--routine-font-sans" });
 
-const WD = ["日", "月", "火", "水", "木", "金", "土"];
-const MOONS = ["🌑", "🌒", "🌓", "🌔", "🌕"];
-const MOON_TITLES = ["0%(未着手)", "25%", "50%", "75%", "100%(完了)"];
-// 一覧(表)専用のスタンプ絵文字。index = 達成度レベル(0〜4)。カレンダー(MOONS)とは別物で、
-// 0(=0%)は「未記録」と同じ「○」のままにする(25/50/75/100%の4段階だけスタンプに差し替え)。
-const STAMPS = ["○", "🐢", "⭕️", "⭐️", "💯"];
-const CATEGORY_COLORS = ["rose", "amber", "moss", "sky", "lavender", "clay", "teal", "slate"];
 // 一覧(表)のタスク名列の幅。CSSの .task-col / .task-col-cell の width と同じ値に揃えること
-// (JS側で日付列の幅を計算する際、この値を引いて残りを日数で割るため)。
+// (JS側で日付列の幅を計算する際、この値を引いて残りを日数で割るため)。デスクトップの
+// 一覧(表)ビュー専用の値なので、モバイル(固定76px)とは別にここに残す。
 const TASK_COL_WIDTH = 200;
-const LEVEL_OPTIONS = [
-  { value: "unset", label: "— 未記録" },
-  { value: "0", label: "🌑 0%" },
-  { value: "1", label: "🐢 25%" },
-  { value: "2", label: "⭕️ 50%" },
-  { value: "3", label: "⭐️ 75%" },
-  { value: "4", label: "💯 100%" },
-  { value: "skip", label: "🌙 今日は不要" },
-];
-
-function pad(n) {
-  return String(n).padStart(2, "0");
-}
-function toDateStr(y, m, d) {
-  return `${y}-${pad(m + 1)}-${pad(d)}`;
-}
-function todayStr() {
-  const t = new Date();
-  return toDateStr(t.getFullYear(), t.getMonth(), t.getDate());
-}
-function parseDateStr(s) {
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(y, m - 1, d);
-}
-function weekdayOf(dateStr) {
-  return parseDateStr(dateStr).getDay();
-}
-function isApplicable(task, dateStr) {
-  if (task.startDate && dateStr < task.startDate) return false;
-  if (task.type === "daily") return true;
-  if (task.type === "weekly") return (task.daysOfWeek || []).includes(weekdayOf(dateStr));
-  if (task.type === "once") return task.date === dateStr;
-  return false;
-}
-function freqLabel(task) {
-  if (task.type === "daily") return "毎日";
-  if (task.type === "weekly") {
-    const days = (task.daysOfWeek || []).slice().sort().map(d => WD[d]).join("・");
-    return `週${(task.daysOfWeek || []).length}(${days || "-"})`;
-  }
-  if (task.type === "once") {
-    const d = parseDateStr(task.date);
-    return `単発 ${d.getMonth() + 1}/${d.getDate()}`;
-  }
-  return "";
-}
-function formatDayTitle(dateStr) {
-  const d = parseDateStr(dateStr);
-  return `${d.getMonth() + 1}月${d.getDate()}日(${WD[d.getDay()]})の記録`;
-}
-function formatMonthDay2(dateStr) {
-  const d = parseDateStr(dateStr);
-  return `${d.getMonth() + 1}/${d.getDate()}(${WD[weekdayOf(dateStr)]})`;
-}
-// タスクの表示順。タスク管理モーダルでのドラッグ並び替え(sortOrder)を基準にし、
-// (原理上あり得ないはずだが)値が無いタスクは作成日順でフォールバックして末尾側に回す。
-function compareTaskOrder(a, b) {
-  const ao = typeof a.sortOrder === "number" ? a.sortOrder : Infinity;
-  const bo = typeof b.sortOrder === "number" ? b.sortOrder : Infinity;
-  if (ao !== bo) return ao - bo;
-  return (a.createdAt || "").localeCompare(b.createdAt || "");
-}
 
 export default function RoutineApp() {
   const routine = useRoutineData();
@@ -169,6 +127,23 @@ export default function RoutineApp() {
     toastTimerRef.current = setTimeout(() => setToast(""), 3400);
   }
   useEffect(() => () => clearTimeout(toastTimerRef.current), []);
+
+  // モバイル画面の「⋯」シートにログイン中のメールアドレス・ログアウトを表示するための状態。
+  // AuthGate側のトップバー(デスクトップ向け)と同じ情報だが、AuthGateのpropsは変えたくない
+  // (デスクトップの既存動作に触れないため)ので、ここで直接supabaseから取得する。
+  const [userEmail, setUserEmail] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) setUserEmail(data?.user?.email || "");
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  function signOut() {
+    supabase.auth.signOut();
+  }
 
   const { tasks, categories, logs } = routine;
 
@@ -291,19 +266,22 @@ export default function RoutineApp() {
   function toggleWeekday(idx) {
     setFormWeekdays(prev => (prev.includes(idx) ? prev.filter(d => d !== idx) : [...prev, idx]));
   }
+  // 戻り値(true/false)はデスクトップ側では使わないが、モバイル側(フルスクリーンの
+  // タスクフォーム)が「保存できたら画面を閉じる、バリデーション失敗なら開いたままにする」
+  // を判断するために使う。
   function saveTaskFromForm() {
     const name = formName.trim();
     if (!name) {
       alert("タスク名を入力してください");
-      return;
+      return false;
     }
     if (formType === "weekly" && formWeekdays.length === 0) {
       alert("曜日を1つ以上選んでください");
-      return;
+      return false;
     }
     if (formType === "once" && !formDate) {
       alert("日付を選んでください");
-      return;
+      return false;
     }
     const patch = {
       name,
@@ -315,6 +293,7 @@ export default function RoutineApp() {
     if (editingTaskId) routine.updateTask(editingTaskId, patch);
     else routine.addTask(patch);
     resetForm();
+    return true;
   }
   function requestDeleteCategory(cat) {
     if (confirm(`カテゴリ「${cat.name}」を削除しますか?(タスクからカテゴリ設定のみ外れます)`)) {
@@ -448,6 +427,9 @@ export default function RoutineApp() {
   return (
     <div className={`routine-root ${shippori.variable} ${zenKaku.variable}`}>
       <style dangerouslySetInnerHTML={{ __html: ROUTINE_CSS }} />
+      {/* デスクトップ向けUI。767px以下ではCSS(.rt-desktop-only)で非表示にし、
+          代わりに.rt-mobile-only内のMobileRoutineAppを表示する(JSでの幅判定はしない)。 */}
+      <div className="rt-desktop-only">
       <div id="routine-app" className={view === "table" ? "wide" : undefined}>
         <div className="app-header">
           <h1>
@@ -494,14 +476,19 @@ export default function RoutineApp() {
                 if (c.outside) return <div key={i} className="day-cell outside" />;
                 const stats = computeDayStats(c.dateStr);
                 const pct = stats.avgPct == null ? 0 : stats.avgPct;
-                const glowOpacity = stats.total > 0 ? (0.06 + (pct / 100) * 0.4).toFixed(2) : 0;
+                // 月アイコン・グロー(月齢インジケーター)は「今日は不要」に設定した項目を
+                // 平均の計算から除外した上での判定にする。stats.total(その日に該当する
+                // 全タスク数)ではなくstats.active(その日のうち「不要」を除いた件数)を見ることで、
+                // その日のタスクが全て「不要」の場合はavgPctがnull(=0%扱い)になっても
+                // 月アイコン自体を表示しない(達成度0%の日として出てしまわないようにする)。
+                const glowOpacity = stats.active > 0 ? (0.06 + (pct / 100) * 0.4).toFixed(2) : 0;
                 const idx = Math.max(0, Math.min(4, Math.round((pct / 100) * 4)));
                 const cls = "day-cell" + (c.dateStr === tStr ? " is-today" : "") + (c.dateStr === selectedDate ? " selected" : "");
                 return (
                   <div key={i} className={cls} onClick={() => setSelectedDate(c.dateStr)}>
                     <div className="glow" style={{ "--g": glowOpacity }} />
                     <div className="date-num">{c.dnum}</div>
-                    {stats.total > 0 && <div className="moon-indicator">{MOONS[idx]}</div>}
+                    {stats.active > 0 && <div className="moon-indicator">{MOONS[idx]}</div>}
                     {stats.hasOnce && <div className="once-badge">✦</div>}
                   </div>
                 );
@@ -540,7 +527,9 @@ export default function RoutineApp() {
                         </div>
                         <div className="task-controls">
                           <div className="moon-picker">
-                            {MOONS.map((m, idx2) => (
+                            {/* 0%(🌑)は「未記録」と実質同じ表示になるため選択肢から外し、
+                                25〜100%の4段階だけ選べるようにする(index=1〜4のまま)。 */}
+                            {MOONS.map((m, idx2) => idx2 === 0 ? null : (
                               <button
                                 key={idx2}
                                 className={"moon-btn" + (!entry.skipped && entry.level === idx2 ? " active" : "")}
@@ -697,8 +686,6 @@ export default function RoutineApp() {
           </button>
         </div>
       </div>
-
-      <div className={"toast" + (toast ? " show" : "")}>{toast}</div>
 
       {modalOpen && (
         <div
@@ -921,6 +908,66 @@ export default function RoutineApp() {
           </div>
         </div>
       )}
+      </div>
+
+      {/* モバイル向けUI(Claude Designのモックアップを元に実装)。デスクトップと同じ
+          useRoutineData()の結果・ハンドラ関数を props で共有し、表示だけを作り直している。 */}
+      <div className="rt-mobile-only">
+        <MobileRoutineApp
+          currentYear={currentYear}
+          currentMonth={currentMonth}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          goPrevMonth={goPrevMonth}
+          goNextMonth={goNextMonth}
+          goToday={goToday}
+          tasks={tasks}
+          categories={categories}
+          tasksForDate={tasksForDate}
+          entryFor={entryFor}
+          computeDayStats={computeDayStats}
+          categoryOf={categoryOf}
+          setLevel={setLevel}
+          toggleSkip={toggleSkip}
+          requestDeleteTask={requestDeleteTask}
+          reorderTasks={routine.reorderTasks}
+          resetForm={resetForm}
+          loadTaskIntoForm={loadTaskIntoForm}
+          saveTaskFromForm={saveTaskFromForm}
+          editingTaskId={editingTaskId}
+          formName={formName}
+          setFormName={setFormName}
+          formType={formType}
+          setFormType={setFormType}
+          formWeekdays={formWeekdays}
+          toggleWeekday={toggleWeekday}
+          formDate={formDate}
+          setFormDate={setFormDate}
+          formCategoryId={formCategoryId}
+          setFormCategoryId={setFormCategoryId}
+          catAddOpen={catAddOpen}
+          openCatAddForm={openCatAddForm}
+          openCatEditForm={openCatEditForm}
+          cancelCatForm={() => { setCatAddOpen(false); setEditingCategoryId(null); }}
+          catName={catName}
+          setCatName={setCatName}
+          catColor={catColor}
+          setCatColor={setCatColor}
+          editingCategoryId={editingCategoryId}
+          confirmCatForm={confirmCatForm}
+          requestDeleteCategory={requestDeleteCategory}
+          tableCategoryFilter={tableCategoryFilter}
+          setTableCategoryFilter={setTableCategoryFilter}
+          exportData={exportData}
+          handleImportFile={handleImportFile}
+          aboutOpen={aboutOpen}
+          setAboutOpen={setAboutOpen}
+          userEmail={userEmail}
+          onSignOut={signOut}
+        />
+      </div>
+
+      <div className={"toast" + (toast ? " show" : "")}>{toast}</div>
     </div>
   );
 }
@@ -950,6 +997,18 @@ const ROUTINE_CSS = `
   }
 }
 .routine-root *{ box-sizing:border-box; }
+/* デスクトップ/モバイルの出し分け。JSでの幅判定はせず、CSSのメディアクエリだけで切り替える
+   (両方のツリーが常にDOM上にはあるが、display:noneの側は中のposition:fixedな要素ごと
+   非表示になるため、モーダル等が二重に見えることはない)。767pxはAnimator Workspace側の
+   モバイル/デスクトップ切り替え(Tailwindのmdブレークポイント=768px)に合わせている。 */
+.rt-desktop-only{ display:block; }
+.rt-mobile-only{ display:none; }
+@media (max-width:767px){
+  .rt-desktop-only{ display:none; }
+  .rt-mobile-only{ display:block; }
+  /* モバイルは下部にタブバーが固定表示されるため、トーストをその上に出す。 */
+  .routine-root .toast{ bottom:76px; }
+}
 .routine-root h1, .routine-root h2, .routine-root h3{ font-family:var(--routine-font-serif),'Hiragino Mincho ProN',serif; font-weight:600; margin:0; }
 .routine-root button{ font-family:inherit; }
 .routine-root button:focus-visible, .routine-root input:focus-visible, .routine-root [tabindex]:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
